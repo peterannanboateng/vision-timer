@@ -1,5 +1,10 @@
 // 20min -> beep 3s -> 20s -> beep 3s -> repeat until Stop
 
+let phaseEndAtMs = null;   // when the current phase should end (ms since epoch)
+let beepEndAtMs = null;    // when the beep should end (only used during beep phase)
+let rafId = null;
+let hiddenPollId = null;
+
 const WORK_SEC = 20 * 60; // 20 minutes
 const REST_SEC = 20;      // 20 seconds
 const BEEP_SEC = 3;       // 3 seconds
@@ -211,3 +216,4 @@ testBtn.addEventListener("click", () => {
 // initial
 render();
 setButtons();
+
