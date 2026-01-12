@@ -1,7 +1,7 @@
 // PAB 20/20 Vision Timer (Web/PWA)
 // Cycle: 20 min -> beep 3s -> 20s -> beep 3s -> repeat until Stop
-// Fixes: Uses wall-clock timing (Date.now) so it doesn't "pause" visually when tab/app isn't visible.
-// Note: Browsers may still block audio while hidden; timer state will stay accurate and catch up.
+// Fix: wall-clock timing (Date.now) so the timer catches up after tab/app isn't visible.
+// Note: browsers may block audio while hidden; timer state stays accurate and catches up.
 
 const WORK_SEC = 20 * 60; // 20 minutes
 const REST_SEC = 20;      // 20 seconds
@@ -15,7 +15,7 @@ const startBtn = document.getElementById("startBtn");
 const stopBtn  = document.getElementById("stopBtn");
 const vibrateToggle = document.getElementById("vibrateToggle");
 
-// --- Add a Test Beep button (no HTML edit needed) ---
+// Add a Test Beep button (no HTML changes needed)
 const testBtn = document.createElement("button");
 testBtn.textContent = "Test Beep";
 testBtn.className = "btn";
@@ -26,10 +26,10 @@ document.querySelector(".wrap")?.appendChild(testBtn);
 let running = false;
 let phase = "ready";           // "work" | "rest" | "beep" | "ready"
 let secondsLeft = WORK_SEC;
-let nextAfterBeep = "rest";    // where to go after beep ends
+let nextAfterBeep = "rest";
 
 // Wall-clock timing
-let phaseEndAtMs = null;       // absolute end time for current phase
+let phaseEndAtMs = null;
 let rafId = null;
 let backgroundPollId = null;
 
@@ -43,6 +43,7 @@ function ensureAudio() {
   if (audioCtx.state === "suspended") audioCtx.resume();
 }
 
+// Keeps AudioContext from sleeping on some devices
 function startAudioKeepAlive() {
   stopAudioKeepAlive();
   keepAliveTimer = setInterval(() => {
@@ -82,9 +83,8 @@ function playToneFor(seconds) {
 
   currentOsc = osc;
 
-  // Optional vibration (mostly Android)
   if (vibrateToggle?.checked && navigator.vibrate) {
-    navigator.vibrate([300, 120, 300, 120, 300, 120, 300]); // ~3s
+    navigator.vibrate([300, 120, 300, 120, 300, 120, 300]);
   }
 }
 
@@ -115,129 +115,9 @@ function render() {
 
 function setButtons() {
   startBtn.disabled = running;
-  stopBtn.disabled = !running;
+  stopBtn.disabled  = !running;
 }
 
 function durationSecondsFor(p) {
   if (p === "work") return WORK_SEC;
-  if (p === "rest") return REST_SEC;
-  if (p === "beep") return BEEP_SEC;
-  return WORK_SEC;
-}
-
-// ---- Phase engine (wall-clock based) ----
-function startPhase(p, nextAfter = null) {
-  phase = p;
-
-  if (p === "beep") {
-    nextAfterBeep = nextAfter || "work";
-    // Start beep tone now (may be blocked while hidden; that's OK)
-    playToneFor(BEEP_SEC);
-  } else {
-    stopTone();
-  }
-
-  const durSec = durationSecondsFor(p);
-  phaseEndAtMs = Date.now() + durSec * 1000;
-  secondsLeft = durSec;
-  render();
-}
-
-function advanceIfNeeded(nowMs) {
-  // If we were hidden/suspended, we may have missed multiple transitions.
-  while (running && phaseEndAtMs && nowMs >= phaseEndAtMs) {
-    if (phase === "work") {
-      startPhase("beep", "rest");
-    } else if (phase === "rest") {
-      startPhase("beep", "work");
-    } else if (phase === "beep") {
-      stopTone();
-      startPhase(nextAfterBeep);
-    } else {
-      startPhase("work");
-    }
-    nowMs = Date.now();
-  }
-}
-
-function updateRemaining(nowMs) {
-  if (!phaseEndAtMs) return;
-  const msLeft = Math.max(0, phaseEndAtMs - nowMs);
-  const secLeft = Math.max(0, Math.ceil(msLeft / 1000));
-  secondsLeft = secLeft;
-  render();
-}
-
-function frameLoop() {
-  if (!running) return;
-  const now = Date.now();
-  advanceIfNeeded(now);
-  updateRemaining(now);
-  rafId = requestAnimationFrame(frameLoop);
-}
-
-// ---- Controls ----
-function start() {
-  if (running) return;
-  running = true;
-
-  ensureAudio();            // unlock audio on user gesture
-  startAudioKeepAlive();    // keep audio context alive
-
-  setButtons();
-
-  // Always start at work
-  startPhase("work");
-
-  // Visual updates
-  if (rafId) cancelAnimationFrame(rafId);
-  rafId = requestAnimationFrame(frameLoop);
-
-  // Safety poll (helps catch up sooner after background throttling)
-  if (backgroundPollId) clearInterval(backgroundPollId);
-  backgroundPollId = setInterval(() => {
-    if (!running) return;
-    advanceIfNeeded(Date.now());
-  }, 1000);
-}
-
-function stop() {
-  running = false;
-
-  if (rafId) cancelAnimationFrame(rafId);
-  rafId = null;
-
-  if (backgroundPollId) clearInterval(backgroundPollId);
-  backgroundPollId = null;
-
-  stopTone();
-  stopAudioKeepAlive();
-
-  phase = "ready";
-  secondsLeft = WORK_SEC;
-  phaseEndAtMs = null;
-
-  setButtons();
-  render();
-}
-
-startBtn.addEventListener("click", start);
-stopBtn.addEventListener("click", stop);
-
-testBtn?.addEventListener("click", () => {
-  ensureAudio();
-  startAudioKeepAlive();
-  playToneFor(1);
-});
-
-// If you tab away and come back, immediately catch up
-document.addEventListener("visibilitychange", () => {
-  if (!running) return;
-  const now = Date.now();
-  advanceIfNeeded(now);
-  updateRemaining(now);
-});
-
-// Init
-render();
-setButtons();
+  if (p ==
