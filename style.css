@@ -75,3 +75,18 @@ body { background: var(--bg); color: var(--fg); }
 }
 
 .note { line-height: 1.35; }
+
+/* ===== Beep Flash Overlay (White) ===== */
+#beep-flash {
+  position: fixed;
+  inset: 0;
+  background: white;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 9999;
+  transition: opacity 120ms ease-in-out;
+}
+
+#beep-flash.active {
+  opacity: 0.9;
+}
