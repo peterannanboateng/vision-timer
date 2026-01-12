@@ -1,4 +1,4 @@
-const CACHE_NAME = "vision-timer-v4";
+const CACHE_NAME = "vision-timer-v20";
 const ASSETS = [
   "./",
   "./index.html",
@@ -28,3 +28,4 @@ self.addEventListener("fetch", (event) => {
     caches.match(event.request).then((cached) => cached || fetch(event.request))
   );
 });
+
