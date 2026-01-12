@@ -2,6 +2,7 @@
 // Cycle: 20 min -> beep 3s -> 20s -> beep 3s -> repeat until Stop
 // Fix: wall-clock timing (Date.now) so the timer catches up after tab/app isn't visible.
 // Note: browsers may block audio while hidden; timer state stays accurate and catches up.
+// Added: white full-screen flash during the 3-second beep phase.
 
 const WORK_SEC = 20 * 60; // 20 minutes
 const REST_SEC = 20;      // 20 seconds
@@ -15,7 +16,17 @@ const startBtn = document.getElementById("startBtn");
 const stopBtn  = document.getElementById("stopBtn");
 const vibrateToggle = document.getElementById("vibrateToggle");
 
-// Add a Test Beep button (no HTML changes needed)
+// ---- White flash overlay for beep ----
+let flashEl = document.getElementById("beep-flash");
+if (!flashEl) {
+  flashEl = document.createElement("div");
+  flashEl.id = "beep-flash";
+  document.body.appendChild(flashEl);
+}
+function startFlash() { flashEl.classList.add("active"); }
+function stopFlash()  { flashEl.classList.remove("active"); }
+
+// ---- Add a Test Beep button (no HTML changes needed) ----
 const testBtn = document.createElement("button");
 testBtn.textContent = "Test Beep";
 testBtn.className = "btn";
@@ -120,4 +131,126 @@ function setButtons() {
 
 function durationSecondsFor(p) {
   if (p === "work") return WORK_SEC;
-  if (p ==
+  if (p === "rest") return REST_SEC;
+  if (p === "beep") return BEEP_SEC;
+  return WORK_SEC;
+}
+
+// ---- Phase engine (wall-clock) ----
+function startPhase(p, nextAfter = null) {
+  phase = p;
+
+  if (p === "beep") {
+    nextAfterBeep = nextAfter || "work";
+    playToneFor(BEEP_SEC); // audio (may be blocked if hidden)
+    startFlash();          // visual alert
+  } else {
+    stopTone();
+    stopFlash();
+  }
+
+  const durSec = durationSecondsFor(p);
+  phaseEndAtMs = Date.now() + durSec * 1000;
+  secondsLeft = durSec;
+  render();
+}
+
+function advanceIfNeeded(nowMs) {
+  // Catch up across multiple transitions if the page was suspended.
+  while (running && phaseEndAtMs && nowMs >= phaseEndAtMs) {
+    if (phase === "work") {
+      startPhase("beep", "rest");
+    } else if (phase === "rest") {
+      startPhase("beep", "work");
+    } else if (phase === "beep") {
+      stopTone();
+      stopFlash();
+      startPhase(nextAfterBeep);
+    } else {
+      startPhase("work");
+    }
+    nowMs = Date.now();
+  }
+}
+
+function updateRemaining(nowMs) {
+  if (!phaseEndAtMs) return;
+  const msLeft = Math.max(0, phaseEndAtMs - nowMs);
+  secondsLeft = Math.max(0, Math.ceil(msLeft / 1000));
+  render();
+}
+
+function frameLoop() {
+  if (!running) return;
+  const now = Date.now();
+  advanceIfNeeded(now);
+  updateRemaining(now);
+  rafId = requestAnimationFrame(frameLoop);
+}
+
+// ---- Controls ----
+function start() {
+  if (running) return;
+  running = true;
+
+  ensureAudio();         // unlock audio on user gesture
+  startAudioKeepAlive();
+
+  setButtons();
+  startPhase("work");
+
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = requestAnimationFrame(frameLoop);
+
+  // Safety poll to advance phases even if rAF is throttled
+  if (backgroundPollId) clearInterval(backgroundPollId);
+  backgroundPollId = setInterval(() => {
+    if (!running) return;
+    advanceIfNeeded(Date.now());
+  }, 1000);
+}
+
+function stop() {
+  running = false;
+
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+
+  if (backgroundPollId) clearInterval(backgroundPollId);
+  backgroundPollId = null;
+
+  stopTone();
+  stopFlash();
+  stopAudioKeepAlive();
+
+  phase = "ready";
+  secondsLeft = WORK_SEC;
+  phaseEndAtMs = null;
+
+  setButtons();
+  render();
+}
+
+startBtn.addEventListener("click", start);
+stopBtn.addEventListener("click", stop);
+
+testBtn?.addEventListener("click", () => {
+  ensureAudio();
+  startAudioKeepAlive();
+  playToneFor(1);
+  // quick flash for test beep
+  startFlash();
+  setTimeout(stopFlash, 200);
+});
+
+// Catch up immediately when returning to the tab/window
+document.addEventListener("visibilitychange", () => {
+  if (!running) return;
+  const now = Date.now();
+  advanceIfNeeded(now);
+  updateRemaining(now);
+});
+
+// Init
+render();
+setButtons();
